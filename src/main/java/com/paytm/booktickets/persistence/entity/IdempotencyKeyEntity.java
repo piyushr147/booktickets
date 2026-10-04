@@ -7,6 +7,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "idempotency_keys")
@@ -18,6 +20,7 @@ public class IdempotencyKeyEntity {
 	@JoinColumn(name = "show_id", nullable = false)
 	private ShowEntity show;
 
+	@JdbcTypeCode(SqlTypes.CHAR)
 	@Column(name = "request_hash", nullable = false, length = 64, columnDefinition = "char(64)")
 	private String requestHash;
 
