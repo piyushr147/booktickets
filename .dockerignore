@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+.env.*
+target
+**/target
+*.log
+*.docx
+*.zip

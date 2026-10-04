@@ -1,0 +1,129 @@
+{
+  "info": {
+    "name": "Booktickets API (local)",
+    "description": "Local Postman collection for the Booktickets service. Start the app at http://localhost:8080 first. Local-only token mint secrets are included for the supplied Docker Compose and IntelliJ development configurations; never use them in a public deployment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "userMintSecret", "value": "local-user-mint-secret-change-me" },
+    { "key": "adminMintSecret", "value": "local-admin-mint-secret-change-me" },
+    { "key": "userToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "showId", "value": "" },
+    { "key": "reservationId", "value": "" },
+    { "key": "idempotencyKey", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health and metrics",
+      "item": [
+        { "name": "Liveness", "request": { "method": "GET", "url": "{{baseUrl}}/health/live" } },
+        { "name": "Readiness (checks PostgreSQL)", "request": { "method": "GET", "url": "{{baseUrl}}/health/ready" } },
+        { "name": "Actuator health", "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health" } },
+        { "name": "Actuator liveness probe", "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health/liveness" } },
+        { "name": "Actuator readiness probe", "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health/readiness" } },
+        { "name": "Prometheus metrics", "request": { "method": "GET", "url": "{{baseUrl}}/actuator/prometheus" } }
+      ]
+    },
+    {
+      "name": "Authentication / token minting",
+      "item": [
+        {
+          "name": "Mint admin token",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Admin token minted', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('adminToken', pm.response.json().access_token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-Token-Mint-Secret", "value": "{{adminMintSecret}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"postman-admin\",\n  \"role\": \"ADMIN\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/auth/token"
+          }
+        },
+        {
+          "name": "Mint user token",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('User token minted', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('userToken', pm.response.json().access_token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-Token-Mint-Secret", "value": "{{userMintSecret}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"postman-user\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/auth/token"
+          }
+        },
+        {
+          "name": "Mint batch of user tokens",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-Token-Mint-Secret", "value": "{{userMintSecret}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"user_ids\": [\"postman-user-1\", \"postman-user-2\"]\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/auth/tokens"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shows",
+      "item": [
+        {
+          "name": "Create show (ADMIN; saves showId)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Show created', function () { pm.response.to.have.status(201); });",
+            "const show = pm.response.json();",
+            "pm.collectionVariables.set('showId', show.id);",
+            "pm.collectionVariables.set('idempotencyKey', 'postman-' + show.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"postman-{{$guid}}\",\n  \"seats\": [\"A1\", \"A2\", \"A3\"],\n  \"price_paise\": 25000,\n  \"per_user_limit\": 4\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shows"
+          }
+        },
+        { "name": "Get show and seat availability", "request": { "method": "GET", "url": "{{baseUrl}}/shows/{{showId}}" } }
+      ]
+    },
+    {
+      "name": "Reservations",
+      "item": [
+        {
+          "name": "Reserve seat (USER; saves reservationId)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Reservation created', function () { pm.response.to.have.status(201); });",
+            "pm.collectionVariables.set('reservationId', pm.response.json().reservation_id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }, { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"seats\": [\"A1\"]\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shows/{{showId}}/reserve"
+          }
+        },
+        {
+          "name": "Retry same reservation (idempotent replay)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Stored result replayed', function () { pm.response.to.have.status(201); pm.expect(pm.response.headers.get('Idempotency-Replayed')).to.eql('true'); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }, { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"seats\": [\"A1\"]\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shows/{{showId}}/reserve"
+          }
+        },
+        {
+          "name": "Cancel reservation (owner USER)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": "{{baseUrl}}/reservations/{{reservationId}}/cancel"
+          }
+        }
+      ]
+    }
+  ]
+}

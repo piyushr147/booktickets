@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-booktickets}
+      POSTGRES_USER: ${POSTGRES_USER:-booktickets}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-booktickets}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-booktickets} -d ${POSTGRES_DB:-booktickets}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: 8080
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-booktickets}
+      DB_USERNAME: ${POSTGRES_USER:-booktickets}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-booktickets}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-25}
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-30000}
+      JWT_SECRET: ${JWT_SECRET:-local-only-change-me-at-least-32-characters}
+      USER_TOKEN_MINT_SECRET: ${USER_TOKEN_MINT_SECRET:-local-user-mint-secret-change-me}
+      ADMIN_TOKEN_MINT_SECRET: ${ADMIN_TOKEN_MINT_SECRET:-local-admin-mint-secret-change-me}
+      TOMCAT_MAX_CONNECTIONS: ${TOMCAT_MAX_CONNECTIONS:-20000}
+      TOMCAT_ACCEPT_COUNT: ${TOMCAT_ACCEPT_COUNT:-20000}
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres-data:
